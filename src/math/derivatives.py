@@ -18,8 +18,9 @@ class FiniteDifferenceStrategy(DerivativeStrategy):
 
         dm = np.gradient(m, x)
         xi = m + dm
+        eta = 2 * m / (m + 1)
 
-        return m, xi
+        return m, xi, eta
     
 from scipy.interpolate import UnivariateSpline
 
@@ -42,8 +43,9 @@ class Spline1DStrategy(DerivativeStrategy):
 
         m = d1
         xi = m + d2
+        eta = 2 * m / (m + 1)
 
-        return m, xi
+        return m, xi, eta
     
 from scipy.signal import savgol_filter
 
@@ -65,8 +67,9 @@ class SavitzkyGolayStrategy(DerivativeStrategy):
 
         m = dy
         xi = m + d2y
+        eta = 2 * m / (m + 1)
 
-        return m, xi
+        return m, xi, eta
     
 from scipy.interpolate import SmoothBivariateSpline
 
@@ -94,5 +97,6 @@ class Spline2DStrategy(DerivativeStrategy):
 
         m = d1
         xi = m + d2
+        eta = 2 * m / (m + 1)
 
-        return m, xi
+        return m, xi, eta

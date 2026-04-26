@@ -62,7 +62,7 @@ def process_alloy(df: pd.DataFrame, strategy: DerivativeStrategy):
         if result is None:
             continue
 
-        g["m"], g["xi"] = result
+        g["m"], g["xi"], g["eta"] = result
         processed.append(g)
 
     return pd.concat(processed, ignore_index=True) if processed else pd.DataFrame()
@@ -85,7 +85,7 @@ def parse():
 
         for strat_name, strategy in STRATEGIES.items():
             strategy = strategy()
-            
+
             print(f"  → Strategy: {strat_name}")
 
             try:
