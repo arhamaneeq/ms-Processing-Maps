@@ -5,6 +5,18 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 from scipy.interpolate import griddata
 
+from src.math.interpolation import (
+    LinearGridStrategy,
+    SmoothedGridStrategy,
+    RBFStrategy
+)
+
+INTERPOLATORS = {
+    "linear": LinearGridStrategy(),
+    "smooth": SmoothedGridStrategy(sigma=1.0),
+    "rbf": RBFStrategy(smooth=0.5),
+}
+
 # -------------------------------
 # Utilities
 # -------------------------------
@@ -56,7 +68,7 @@ def plot_processing_map(Tg, Eg, Z_eta, Z_xi, title, save_path):
         Tg, Eg,
         Z_xi,
         levels=[-1e9, 0],
-        colors='lightgray',
+        colors='red',
         alpha=0.5
     )
 
@@ -85,36 +97,26 @@ def plot_processing_map(Tg, Eg, Z_eta, Z_xi, title, save_path):
 ALLOYS = parse()
 
 for alloy, strategies in ALLOYS.items():
-    print(f"\nProcessing alloy: {alloy}")
+    for strategy_name, DF in strategies.items():
+        for interp_name, interpolator in INTERPOLATORS.items():
 
-    for strategy, DF in strategies.items():
-        print(f"  → Strategy: {strategy}")
+            for strain in sorted(DF["strain"].unique()):
+                df = DF[DF["strain"] == strain]
 
-        if DF.empty:
-            continue
+                df = clean_data(df)
+                df = df.dropna(subset=["eta", "xi"])
 
-        for strain in sorted(DF["strain"].unique()):
-            df = DF[DF["strain"] == strain]
+                if len(df) < 5:
+                    continue
 
-            if len(df) < 5:
-                continue
+                Tg, Eg, Z_eta, Z_xi = interpolator.interpolate(df)
 
-            df = clean_data(df)
+                Z_eta = 100 * Z_eta  # convert to %
 
-            # drop rows with NaNs after cleaning
-            df = df.dropna(subset=["eta", "xi"])
+                title = f"{alloy} | {strategy_name} | {interp_name} | strain={strain:.3f}"
 
-            if len(df) < 5:
-                continue
-
-            try:
-                Tg, Eg, Z_eta, Z_xi = interpolate_grid(df)
-
-                title = f"{alloy} | {strategy} | strain = {strain:.3f}"
-                save_path = Path(f"images/{alloy}/{strategy}/strain_{strain:.3f}.png")
+                save_path = Path(
+                    f"images/{alloy}/{strategy_name}/{interp_name}/strain_{strain:.3f}.png"
+                )
 
                 plot_processing_map(Tg, Eg, Z_eta, Z_xi, title, save_path)
-
-            except Exception as e:
-                print(f"     (failed at strain {strain}: {e})")
-                continue
