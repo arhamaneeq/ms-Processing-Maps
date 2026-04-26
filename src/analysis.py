@@ -8,13 +8,15 @@ from scipy.interpolate import griddata
 from src.math.interpolation import (
     LinearGridStrategy,
     SmoothedGridStrategy,
-    RBFStrategy
+    RBFStrategy,
+    GridSplineStrategy
 )
 
 INTERPOLATORS = {
     "linear": LinearGridStrategy(),
     "smooth": SmoothedGridStrategy(sigma=1.0),
-    "rbf": RBFStrategy(smooth=0.5),
+    "spline_grid": GridSplineStrategy(s=0.001),
+    # "rbf": RBFStrategy(smooth=0.5),  # keep off unless needed
 }
 
 # -------------------------------
@@ -31,8 +33,7 @@ def f_to_c(x):
 def clean_data(df):
     df = df.copy()
 
-    # remove unphysical values
-    df.loc[(df["m"] < 0) | (df["m"] > 1), ["eta", "xi"]] = np.nan
+    # clip eta only (for plotting sanity)
     df["eta"] = df["eta"].clip(0, 1)
 
     return df
@@ -52,13 +53,13 @@ def interpolate_grid(df, resolution=100):
     return Tg, Eg, Z_eta, Z_xi
 
 
-def plot_processing_map(Tg, Eg, Z_eta, Z_xi, title, save_path):
+def plot_processing_map(Tg, Eg, Z_eta, Z_xi, invalid_mask, title, save_path):
     plt.figure(figsize=(8, 8))
 
     # -------------------------------
     # η contour lines
     # -------------------------------
-    cs = plt.contour(Tg, Eg, Z_eta, levels=15, colors='black')
+    cs = plt.contour(Tg, Eg, Z_eta, levels=10, colors='black')
     plt.clabel(cs, inline=True, fontsize=8)
 
     # -------------------------------
@@ -70,6 +71,14 @@ def plot_processing_map(Tg, Eg, Z_eta, Z_xi, title, save_path):
         levels=[-1e9, 0],
         colors='red',
         alpha=0.5
+    )
+
+    plt.contourf(
+        Tg, Eg,
+        invalid_mask,
+        levels=[0.5, 1],
+        colors='none',
+        hatches=['....']
     )
 
     # -------------------------------
@@ -109,9 +118,11 @@ for alloy, strategies in ALLOYS.items():
                 if len(df) < 5:
                     continue
 
-                Tg, Eg, Z_eta, Z_xi = interpolator.interpolate(df)
+                Tg, Eg, Z_eta, Z_xi, Z_m = interpolator.interpolate(df)
 
-                Z_eta = 100 * Z_eta  # convert to %
+                Z_eta = 100 * Z_eta
+
+                invalid_mask = (Z_m < 0) | (Z_m > 1)
 
                 title = f"{alloy} | {strategy_name} | {interp_name} | strain={strain:.3f}"
 
@@ -119,4 +130,10 @@ for alloy, strategies in ALLOYS.items():
                     f"images/{alloy}/{strategy_name}/{interp_name}/strain_{strain:.3f}.png"
                 )
 
-                plot_processing_map(Tg, Eg, Z_eta, Z_xi, title, save_path)
+                plot_processing_map(
+                    Tg, Eg,
+                    Z_eta, Z_xi,
+                    invalid_mask,
+                    title,
+                    save_path
+                )
