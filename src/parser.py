@@ -2,9 +2,24 @@ import pandas as pd
 import numpy as np
 from pathlib import Path
 from scipy.interpolate import UnivariateSpline
+from src.math.derivatives import DerivativeStrategy
+from src.math.derivatives import (
+    FiniteDifferenceStrategy,
+    Spline1DStrategy,
+    SavitzkyGolayStrategy,
+    Spline2DStrategy,
+)
 
 DIR = Path("data/")
 GROUP_KEYS = ["strain", "temperature"]
+
+STRATEGIES = {
+    "finite_diff": lambda: FiniteDifferenceStrategy(),
+    "spline_1d_s001": lambda: Spline1DStrategy(s_factor=0.01),
+    "spline_1d_s01": lambda: Spline1DStrategy(s_factor=0.1),
+    "savgol_w5_p2": lambda: SavitzkyGolayStrategy(window=5, poly=2),
+    "spline_2d": lambda: Spline2DStrategy(s=0.1),
+}
 
 def read_csv(csv_path: Path) -> pd.DataFrame:
     df = pd.read_csv(csv_path)
@@ -25,15 +40,19 @@ def read_csv(csv_path: Path) -> pd.DataFrame:
 
     return df
 
-def process_alloy(df: pd.DataFrame, strategy) -> pd.DataFrame:
+def process_alloy(df: pd.DataFrame, strategy: DerivativeStrategy):
     df = df.copy()
 
     df["log_strain_rate"] = np.log(df["strain_rate"])
     df["log_flow_stress"] = np.log(df["flow_stress"])
 
+    # allow global fitting if needed
+    if hasattr(strategy, "fit"):
+        strategy.fit(df)
+
     processed = []
 
-    for (strain, temp), g in df.groupby(GROUP_KEYS):
+    for (strain, temp), g in df.groupby(["strain", "temperature"]):
         g = g.sort_values("strain_rate").reset_index(drop=True)
 
         if len(g) < 3:
@@ -49,7 +68,7 @@ def process_alloy(df: pd.DataFrame, strategy) -> pd.DataFrame:
     return pd.concat(processed, ignore_index=True) if processed else pd.DataFrame()
 
 def parse():
-    DF_ALLOYS = {}
+    results = {}
 
     csv_files = [
         csv for csv in DIR.iterdir()
@@ -58,11 +77,29 @@ def parse():
 
     for csv in csv_files:
         alloy_name = csv.stem
-        print(f"\nProcessing: {alloy_name}")
+        print(f"\nProcessing alloy: {alloy_name}")
 
-        df = read_csv(csv)
-        # print(df.head())
+        df_raw = read_csv(csv)
 
-        DF_ALLOYS[alloy_name] = process_alloy(df, alloy_name)
+        results[alloy_name] = {}
 
-    return DF_ALLOYS
+        for strat_name, strategy in STRATEGIES.items():
+            strategy = strategy()
+            
+            print(f"  → Strategy: {strat_name}")
+
+            try:
+                df_processed = process_alloy(df_raw, strategy)
+
+                # Skip empty outputs cleanly
+                if df_processed.empty:
+                    print("     (no valid groups)")
+                    continue
+
+                results[alloy_name][strat_name] = df_processed
+
+            except Exception as e:
+                print(f"     (failed: {e})")
+                continue
+
+    return results

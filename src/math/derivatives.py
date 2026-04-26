@@ -2,7 +2,10 @@ import pandas as pd
 import numpy as np
 
 class DerivativeStrategy:
-    def compute(self, g: pd.DataFrame) -> tuple[np.ndarray, np.ndarray]:
+    def fit(self, df: pd.DataFrame):
+        pass  # optional
+
+    def compute(self, g: pd.DataFrame):
         raise NotImplementedError
     
 class FiniteDifferenceStrategy(DerivativeStrategy):
@@ -67,9 +70,10 @@ class SavitzkyGolayStrategy(DerivativeStrategy):
     
 from scipy.interpolate import SmoothBivariateSpline
 
-class Spline2DStrategy:
+class Spline2DStrategy(DerivativeStrategy):
     def __init__(self, s=0.1):
         self.s = s
+        self.spline = None
 
     def fit(self, df: pd.DataFrame):
         x = df["log_strain_rate"].values
@@ -78,7 +82,10 @@ class Spline2DStrategy:
 
         self.spline = SmoothBivariateSpline(x, t, y, s=self.s)
 
-    def compute_group(self, g: pd.DataFrame):
+    def compute(self, g: pd.DataFrame):
+        if self.spline is None:
+            raise RuntimeError("Spline2DStrategy must be fit() before use")
+
         x = g["log_strain_rate"].values
         t = g["temperature"].values
 
