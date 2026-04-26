@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from scipy.interpolate import UnivariateSpline
 
 DIR = Path("data/")
 GROUP_KEYS = ["strain", "temperature"]
@@ -24,16 +25,28 @@ def read_csv(csv_path: Path) -> pd.DataFrame:
 
     return df
 
-def compute_m(df: pd.DataFrame) -> np.ndarray:
-    dlog_sigma = np.gradient(df["log_flow_stress"])
-    dlog_epsdot = np.gradient(df["log_strain_rate"])
-    return dlog_sigma / dlog_epsdot
+def compute_m_xi_spline(g: pd.DataFrame, s_factor: float = None):
+    x = g["log_strain_rate"].values
+    y = g["log_flow_stress"].values
 
+    # Safety: ensure strictly increasing x (required for spline)
+    if not np.all(np.diff(x) > 0):
+        return None
 
-def compute_xi(df: pd.DataFrame) -> np.ndarray:
-    dm = np.gradient(df["m"])
-    dlog_epsdot = np.gradient(df["log_strain_rate"])
-    return df["m"] + (dm / dlog_epsdot)
+    # Default smoothing if not provided
+    # s ≈ N * variance is a reasonable heuristic
+    if s_factor is None:
+        s_factor = len(x) * np.var(y) * 0.01  # tune this
+
+    spline = UnivariateSpline(x, y, s=s_factor)
+
+    d1 = spline.derivative(1)(x)  # m
+    d2 = spline.derivative(2)(x)  # d(m)/d(log epsdot)
+
+    m = d1
+    xi = m + d2
+
+    return m, xi
 
 
 def process_alloy(df: pd.DataFrame, alloy_name: str) -> pd.DataFrame:
@@ -50,8 +63,12 @@ def process_alloy(df: pd.DataFrame, alloy_name: str) -> pd.DataFrame:
         if len(g) < 3:
             continue
 
-        g["m"] = compute_m(g)
-        g["xi"] = compute_xi(g)
+        result = compute_m_xi_spline(g)
+
+        if result is None:
+            continue
+
+        g["m"], g["xi"] = result
 
         processed_groups.append(g)
 
