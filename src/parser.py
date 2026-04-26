@@ -25,37 +25,13 @@ def read_csv(csv_path: Path) -> pd.DataFrame:
 
     return df
 
-def compute_m_xi_spline(g: pd.DataFrame, s_factor: float = None):
-    x = g["log_strain_rate"].values
-    y = g["log_flow_stress"].values
-
-    # Safety: ensure strictly increasing x (required for spline)
-    if not np.all(np.diff(x) > 0):
-        return None
-
-    # Default smoothing if not provided
-    # s ≈ N * variance is a reasonable heuristic
-    if s_factor is None:
-        s_factor = len(x) * np.var(y) * 0.01  # tune this
-
-    spline = UnivariateSpline(x, y, s=s_factor)
-
-    d1 = spline.derivative(1)(x)  # m
-    d2 = spline.derivative(2)(x)  # d(m)/d(log epsdot)
-
-    m = d1
-    xi = m + d2
-
-    return m, xi
-
-
-def process_alloy(df: pd.DataFrame, alloy_name: str) -> pd.DataFrame:
+def process_alloy(df: pd.DataFrame, strategy) -> pd.DataFrame:
     df = df.copy()
 
     df["log_strain_rate"] = np.log(df["strain_rate"])
     df["log_flow_stress"] = np.log(df["flow_stress"])
 
-    processed_groups = []
+    processed = []
 
     for (strain, temp), g in df.groupby(GROUP_KEYS):
         g = g.sort_values("strain_rate").reset_index(drop=True)
@@ -63,21 +39,14 @@ def process_alloy(df: pd.DataFrame, alloy_name: str) -> pd.DataFrame:
         if len(g) < 3:
             continue
 
-        result = compute_m_xi_spline(g)
-
+        result = strategy.compute(g)
         if result is None:
             continue
 
         g["m"], g["xi"] = result
+        processed.append(g)
 
-        processed_groups.append(g)
-
-    if not processed_groups:
-        return pd.DataFrame()
-
-    df_all = pd.concat(processed_groups, ignore_index=True)
-
-    return df_all
+    return pd.concat(processed, ignore_index=True) if processed else pd.DataFrame()
 
 def parse():
     DF_ALLOYS = {}
