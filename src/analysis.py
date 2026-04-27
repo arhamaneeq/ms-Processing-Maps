@@ -2,6 +2,7 @@ from src.parser import parse
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.ticker as mticker
 from pathlib import Path
 from scipy.interpolate import griddata
 
@@ -91,6 +92,10 @@ def plot_processing_map(Tg, Eg, Z_eta, Z_xi, invalid_mask, title, save_path):
     # dual axis (°F)
     secax = plt.gca().secondary_xaxis('top', functions=(c_to_f, f_to_c))
     secax.set_xlabel("Temperature (°F)")
+
+    plt.gca().yaxis.set_major_formatter(
+        mticker.FuncFormatter(lambda y, _: f"{y/2:.2f}")
+    )
 
     plt.tight_layout()
 
